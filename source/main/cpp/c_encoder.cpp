@@ -63,11 +63,11 @@ namespace ncore
 
         static s8 s_histogram_cmp_fn(const void* a, const void* b, const void* user_data)
         {
-            u16 const  ai              = *(const u16*)a;
-            u16 const  bi              = *(const u16*)b;
-            u32 const* histogram_count = (const u32*)user_data;
-            u32 const  ac              = histogram_count[ai];
-            u32 const  bc              = histogram_count[bi];
+            u16 const                  ai    = *(const u16*)a;
+            u16 const                  bi    = *(const u16*)b;
+            histogram_t::item_t const* items = (const histogram_t::item_t*)user_data;
+            u32 const                  ac    = items[ai].m_count;
+            u32 const                  bc    = items[bi].m_count;
             if (ac > bc)
                 return -1;  // Sort in descending order
             if (ac < bc)
@@ -101,13 +101,13 @@ namespace ncore
         s32 encode_frame(encoder_t& encoder, frame_begin_t* out_begin, u8* out_data, u32 out_data_capacity, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size)
         {
             // Initialize histogram and palette
-            g_memory_fill(encoder.m_histogram_count, 0, sizeof(encoder.m_histogram_count));
-
-            for (u32 i = 0; i < 65536; ++i)
-                encoder.m_histogram_color[i] = (i16)i;  // Initialize histogram color (index)
+            for (i32 i = 0; i < 65536; ++i)
+            {
+                encoder.m_histogram.m_items[i].m_color = i;  // Initialize histogram color (index)
+                encoder.m_histogram.m_items[i].m_count = 0;  // Initialize histogram count
+            }
 
             // 1. Build color histogram and palette
-
             for (u32 y = 0; y < height; ++y)
             {
                 // u32 const* previous_img_row    = previous_img + y * width;
@@ -116,86 +116,79 @@ namespace ncore
                 while (current_img_row < current_img_row_end)
                 {
                     const u16 crgb565 = s_rgba888_to_rgb565(*current_img_row++);
-                    encoder.m_histogram_count[crgb565]++;
+                    encoder.m_histogram.m_items[crgb565].m_count++;
                 }
             }
 
             // Sort colors by frequency and build palette and histogram index
-            nsort::sort(encoder.m_histogram_color, 65536, s_histogram_cmp_fn, (const void*)encoder.m_histogram_count);
+            nsort::sort(encoder.m_histogram.m_items, 65536, s_histogram_cmp_fn, (const void*)encoder.m_histogram.m_items);
 
-            for (u32 i = 0; i < 276; ++i)
+            // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
+            for (i32 i = 0; i < 276; ++i)
             {
-                u16 const color         = encoder.m_histogram_color[i];
-                out_begin->m_palette[i] = color;
-                if (encoder.m_histogram_count[color] == 0)
-                    break;  // No more colors in the image
+                const i32 color                            = encoder.m_histogram.m_items[i].m_color;
+                out_begin->m_palette[i]                    = color;
+                encoder.m_histogram.m_items[color].m_color = i;  // Use histogram color as palette index for lookup during encoding
+            }
+            for (i32 i = 276; i < 65536; ++i)
+            {
+                encoder.m_histogram.m_items[i].m_color = -1;
             }
 
             // For P2, P4 and P8 we can calculate the number of pixels that are used
-            const u32 total_pixel_count = width * height;
-            u32       p2_pixel_count    = 0;
-            u32       p4_pixel_count    = 0;
-            u32       p8_pixel_count    = 0;
+            u32 p2_pixel_count = 0;
             for (u32 i = 0; i < 4; ++i)
             {
-                u16 const color_index = encoder.m_histogram_color[i];
-                u32 const count       = encoder.m_histogram_count[color_index];
-                if (count == 0)
-                    break;  // No more colors in the image
+                u32 const count = encoder.m_histogram.m_items[i].m_count;
                 p2_pixel_count += count;
             }
+            u32 p4_pixel_count = 0;
             for (u32 i = 4; i < 20; ++i)
             {
-                u16 const color_index = encoder.m_histogram_color[i];
-                u32 const count       = encoder.m_histogram_count[color_index];
-                if (count == 0)
-                    break;  // No more colors in the image
+                u32 const count = encoder.m_histogram.m_items[i].m_count;
                 p4_pixel_count += count;
             }
+            u32 p8_pixel_count = 0;
             for (u32 i = 20; i < 276; ++i)
             {
-                u16 const color_index = encoder.m_histogram_color[i];
-                u32 const count       = encoder.m_histogram_count[color_index];
-                if (count == 0)
-                    break;  // No more colors in the image
+                u32 const count = encoder.m_histogram.m_items[i].m_count;
                 p8_pixel_count += count;
             }
-            const u32 p16_pixel_count = total_pixel_count - (p2_pixel_count + p4_pixel_count + p8_pixel_count);
+            const u32 total_pixel_count = width * height;
+            const u32 p16_pixel_count   = total_pixel_count - (p2_pixel_count + p4_pixel_count + p8_pixel_count);
+            ASSERT(p16_pixel_count + p8_pixel_count + p4_pixel_count + p2_pixel_count == total_pixel_count);
 
-            u8 stream_symbol_sizes[6];
-            stream_symbol_sizes[LF_STREAM_P16]  = SYMBOL_SIZE_P16;
-            stream_symbol_sizes[LF_STREAM_P8]   = SYMBOL_SIZE_P8;
-            stream_symbol_sizes[LF_STREAM_P4]   = SYMBOL_SIZE_P4;
-            stream_symbol_sizes[LF_STREAM_P2]   = SYMBOL_SIZE_P2;
-            stream_symbol_sizes[LF_STREAM_PS]   = SYMBOL_SIZE_PS;
-            stream_symbol_sizes[LF_STREAM_SPAN] = SYMBOL_SIZE_SPAN;
+            u8 stream_symbol_sizes[STREAM_COUNT];
+            stream_symbol_sizes[STREAM_P16]  = SYMBOL_SIZE_P16;
+            stream_symbol_sizes[STREAM_P8]   = SYMBOL_SIZE_P8;
+            stream_symbol_sizes[STREAM_P4]   = SYMBOL_SIZE_P4;
+            stream_symbol_sizes[STREAM_P2]   = SYMBOL_SIZE_P2;
+            stream_symbol_sizes[STREAM_PS]   = SYMBOL_SIZE_PS;
+            stream_symbol_sizes[STREAM_SPAN] = SYMBOL_SIZE_SPAN;
 
             // Now we can calculate the size each stream needs in bytes
-            u32 max_stream_size_in_bytes[6]          = {0, 0, 0, 0, 0, 0};
-            max_stream_size_in_bytes[LF_STREAM_P16]  = (p16_pixel_count * 2);                                        // 16 bits per pixel = 2 bytes per pixel
-            max_stream_size_in_bytes[LF_STREAM_P8]   = (p8_pixel_count * 1);                                         // 8 bits per pixel = 1 byte per pixel
-            max_stream_size_in_bytes[LF_STREAM_P4]   = (p4_pixel_count + 1) >> 1;                                    //
-            max_stream_size_in_bytes[LF_STREAM_P2]   = (p2_pixel_count + 3) >> 2;                                    //
-            max_stream_size_in_bytes[LF_STREAM_PS]   = (total_pixel_count + 3) >> 2;                                 // 2 bits per pixel selector stream, so total pixels / 4
-            max_stream_size_in_bytes[LF_STREAM_SPAN] = ((((width + tile_size - 1) / tile_size) * height) + 7) >> 3;  // 1 bit per span, so total spans / 8
+            u32 max_stream_size_in_bytes[STREAM_COUNT]          = {0, 0, 0, 0, 0, 0};
+            max_stream_size_in_bytes[STREAM_P16]  = (p16_pixel_count * 2);                                        // 16 bits per pixel = 2 bytes per pixel
+            max_stream_size_in_bytes[STREAM_P8]   = (p8_pixel_count * 1);                                         // 8 bits per pixel = 1 byte per pixel
+            max_stream_size_in_bytes[STREAM_P4]   = (p4_pixel_count + 1) >> 1;                                    //
+            max_stream_size_in_bytes[STREAM_P2]   = (p2_pixel_count + 3) >> 2;                                    //
+            max_stream_size_in_bytes[STREAM_PS]   = (total_pixel_count + 3) >> 2;                                 // 2 bits per pixel selector stream, so total pixels / 4
+            max_stream_size_in_bytes[STREAM_SPAN] = ((((width + tile_size - 1) / tile_size) * height) + 7) >> 3;  // 1 bit per span, so total spans / 8
 
-            // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
-            for (u32 i = 0; i < 65536; ++i)
-                encoder.m_histogram_color[i] = -1;
-
-            for (u32 i = 0; i < 276; ++i)
+            u32 total_max_stream_size_in_bytes = 0;
+            for (u32 i = 0; i < STREAM_COUNT; ++i)
             {
-                if (encoder.m_histogram_count[out_begin->m_palette[i]] == 0)
-                    break;
-                encoder.m_histogram_color[out_begin->m_palette[i]] = (i16)i;
+                total_max_stream_size_in_bytes += max_stream_size_in_bytes[i];
             }
+            ASSERT(total_max_stream_size_in_bytes <= out_data_capacity);  // We need to make sure the output buffer is large enough to hold all the streams
 
             // Now that we have everything set up, we can start encoding the image by comparing it to the
             // previous image and filling the streams accordingly.
 
-            nbitstream::writer_t stream_writer[6];
-            u8*                  stream_data_ptr = out_data;
-            for (u32 i = 0; i < 6; ++i)
+            nbitstream::writer_t stream_writer[STREAM_COUNT];
+
+            u8* stream_data_ptr = out_data;
+            for (u32 i = 0; i < STREAM_COUNT; ++i)
             {
                 nbitstream::init(&stream_writer[i], stream_data_ptr, max_stream_size_in_bytes[i] * 8);
                 stream_data_ptr += max_stream_size_in_bytes[i];
@@ -223,41 +216,39 @@ namespace ncore
                         const u16 prgb565 = s_rgba888_to_rgb565(previous_img_row[x]);
                         span_changed      = (crgb565 != prgb565);
                     }
-                    nbitstream::write_bits(&stream_writer[LF_STREAM_SPAN], span_changed ? 1u : 0u, 1);
+                    nbitstream::write_bits(&stream_writer[STREAM_SPAN], span_changed ? 1u : 0u, 1);
                     if (!span_changed)
                         continue;
-
                     num_spans_changed++;
 
                     for (u32 x = x0; x < x1; ++x)
                     {
-                        const u16 crgb565 = s_rgba888_to_rgb565(current_img_row[x]);
-
                         // Note:
                         // Below we are ignoring the return value of write_bits for performance reasons
                         // We know that the stream have enough capacity because we calculated and reserved
                         // the correct amount of memory for each stream at the start of this function,
                         // and we are filling the streams in a way that matches the calculated sizes.
 
-                        const u16 palette_index = encoder.m_histogram_color[crgb565];
+                        const u16 crgb565       = s_rgba888_to_rgb565(current_img_row[x]);
+                        const u16 palette_index = encoder.m_histogram.m_items[crgb565].m_color;
                         if (palette_index < 4)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
                         }
                         else if (palette_index < 20)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
                         }
                         else if (palette_index < 276)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
                         }
                         else
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
                             // no need to write p16 here since we don't need it because it is
                             // not going to be compressed.
                             // nbitstream::write_bits(&p16_writer, (u32)crgb565, SYMBOL_SIZE_P16);
@@ -269,10 +260,10 @@ namespace ncore
             // Compress the streams to obtain the rb values for each stream, which are needed for the frame header,
             // and also to compress streams per line.
 
-            u8* rb_arrays[6] = {nullptr, out_begin->m_p8_rb, out_begin->m_p4_rb, out_begin->m_p2_rb, out_begin->m_ps_rb, out_begin->m_span_rb};
-            for (u32 i = 0; i < 6; ++i)
+            u8* rb_arrays[STREAM_COUNT] = {nullptr, out_begin->m_p8_rb, out_begin->m_p4_rb, out_begin->m_p2_rb, out_begin->m_ps_rb, out_begin->m_span_rb};
+            for (u32 i = 0; i < STREAM_COUNT; ++i)
             {
-                if (i == LF_STREAM_P16)
+                if (i == STREAM_P16)
                     continue;  // We don't compress the P16 stream, so we don't need to calculate rb values for it
 
                 const u32 stream_size_in_bits = nbitstream::finalize(&stream_writer[i]);
@@ -295,7 +286,7 @@ namespace ncore
                 u32 const* previous_img_row = previous_img + y * width;
 
                 // Setup the bitstream writers for this line
-                for (u32 i = 0; i < 6; ++i)
+                for (u32 i = 0; i < STREAM_COUNT; ++i)
                 {
                     nbitstream::init(&stream_writer[i], (u8*)encoder.m_streams[i], sizeof(encoder.m_streams[i]) * 2 * 8);
                 }
@@ -313,40 +304,40 @@ namespace ncore
                         const u16 prgb565 = s_rgba888_to_rgb565(previous_img_row[x]);
                         span_changed      = (crgb565 != prgb565);
                     }
-                    nbitstream::write_bits(&stream_writer[LF_STREAM_SPAN], span_changed ? 1u : 0u, SYMBOL_SIZE_SPAN);
+                    nbitstream::write_bits(&stream_writer[STREAM_SPAN], span_changed ? 1u : 0u, SYMBOL_SIZE_SPAN);
                     if (!span_changed)
                         continue;
                     num_spans_changed++;
 
                     for (u32 x = x0; x < x1; ++x)
                     {
-                        const u16 crgb565 = s_rgba888_to_rgb565(current_img_row[x]);
-                        const u16 palette_index = encoder.m_histogram_color[crgb565];
-
                         // Note:
                         // Below we are ignoring the return value of write_bits for performance reasons
                         // We know that the streams have enough capacity because we calculated and reserved
                         // the correct amount of memory for each stream at the start of this function,
                         // and we are filling the streams in a way that matches the calculated sizes.
+
+                        const u16 crgb565       = s_rgba888_to_rgb565(current_img_row[x]);
+                        const u16 palette_index = encoder.m_histogram.m_items[crgb565].m_color;
                         if (palette_index < 4)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
                         }
                         else if (palette_index < 20)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
                         }
                         else if (palette_index < 276)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
                         }
                         else
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P16], (u32)crgb565, SYMBOL_SIZE_P16);
+                            nbitstream::write_bits(&stream_writer[STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[STREAM_P16], (u32)crgb565, SYMBOL_SIZE_P16);
                         }
                     }
                 }
@@ -354,8 +345,8 @@ namespace ncore
                 if (num_spans_changed > 0)
                 {
                     // Emit a frame_line_t structure for this line
-                    u32 stream_written_bytes[6];
-                    for (i32 i = 0; i < 6; ++i)
+                    u32 stream_written_bytes[STREAM_COUNT];
+                    for (i32 i = 0; i < STREAM_COUNT; ++i)
                     {
                         stream_written_bytes[i] = (nbitstream::finalize(&stream_writer[i]) + 7) / 8;
                     }
@@ -365,21 +356,21 @@ namespace ncore
                     fl->m_index      = (u16)y;
 
                     fl->m_flags = 0;
-                    for (i32 i = 0; i < 6; ++i)
+                    for (i32 i = 0; i < STREAM_COUNT; ++i)
                         fl->m_flags |= (stream_written_bytes[i] > 0) ? (1 << i) : 0;
 
                     // Compress some of the streams
                     fl->m_num_streams       = 0;
-                    u32 stream_enc_sizes[6] = {0};
-                    for (i32 i = 0; i < 6; ++i)
+                    u32 stream_enc_sizes[STREAM_COUNT] = {0};
+                    for (i32 i = 0; i < STREAM_COUNT; ++i)
                     {
                         if (stream_written_bytes[i] > 0)
                         {
                             fl->m_num_streams++;
 
-                            if (i == LF_STREAM_P16)
+                            if (i == STREAM_P16)
                             {
-                                stream_enc_sizes[LF_STREAM_P16] = stream_written_bytes[LF_STREAM_P16] * 2;
+                                stream_enc_sizes[STREAM_P16] = stream_written_bytes[STREAM_P16] * 2;
                                 g_memcpy(encoder.m_enc_streams[i], encoder.m_streams[i], stream_enc_sizes[i]);
                             }
                             else
@@ -393,7 +384,7 @@ namespace ncore
                     // Emit the dynamic size array of stream sizes, in the order of p16, p8, p4, p2, selector, span
                     u16* stream_sizes = (u16*)(fl + 1);
                     u32  si           = 0;
-                    for (i32 i = 0; i < 6; ++i)
+                    for (i32 i = 0; i < STREAM_COUNT; ++i)
                     {
                         if (stream_written_bytes[i] > 0)
                             *stream_sizes++ = (u16)stream_enc_sizes[i];
@@ -401,7 +392,7 @@ namespace ncore
 
                     // Now we emit the per stream data for this line, in the order of p16, p8, p4, p2, selector, span
                     u8* stream_data_ptr = (u8*)stream_sizes;
-                    for (i32 i = 0; i < 6; ++i)
+                    for (i32 i = 0; i < STREAM_COUNT; ++i)
                     {
                         if (stream_written_bytes[i] > 0)
                         {
@@ -415,7 +406,7 @@ namespace ncore
 
                     // Set the message length for this line, which is:
                     //    sizeof(frame_line_t) + stream sizes array + all stream data
-                    fl->m_msg_len = (u16)(stream_data_ptr - out_data_ptr); 
+                    fl->m_msg_len = (u16)(stream_data_ptr - out_data_ptr);
 
                     // Update the out data pointer for the next line
                     out_data_ptr = stream_data_ptr;

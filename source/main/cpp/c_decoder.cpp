@@ -6,7 +6,7 @@ namespace ncore
 {
     namespace nfenc
     {
-        static u16 s_span_line_buffer[128];
+        static u16 s_span_line_buffer[64];
 
         void decode_line(frame_begin_t& frame, u16 span_width, u16 spans_per_line, frame_line_t const* line_msg, u16* out_psram_ptr)
         {
@@ -24,32 +24,32 @@ namespace ncore
             u8 const*  data_ptr       = (u8 const*)(stream_lengths + line_msg->m_num_streams);
 
             i32 i = 0;
-            if (line_msg->m_flags & (1<<LF_STREAM_P16))
+            if (line_msg->m_flags & (1<<STREAM_P16))
             {
                 p16_data = (u16*)data_ptr;
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<LF_STREAM_P8))
+            if (line_msg->m_flags & (1<<STREAM_P8))
             {
                 nsrlen::init(&p8_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<LF_STREAM_P4))
+            if (line_msg->m_flags & (1<<STREAM_P4))
             {
                 nsrlen::init(&p4_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<LF_STREAM_P2))
+            if (line_msg->m_flags & (1<<STREAM_P2))
             {
                 nsrlen::init(&p2_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<LF_STREAM_SELECTOR))
+            if (line_msg->m_flags & (1<<STREAM_PS))
             {
                 nsrlen::init(&ps_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<LF_STREAM_SPAN))
+            if (line_msg->m_flags & (1<<STREAM_SPAN))
             {
                 nsrlen::init(&span_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];

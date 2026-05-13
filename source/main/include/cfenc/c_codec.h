@@ -29,6 +29,16 @@ namespace ncore
             SYMBOL_SIZE_SPAN = 1
         };
 
+        enum stream_e
+        {
+            STREAM_P16   = 0,
+            STREAM_P8    = 1,
+            STREAM_P4    = 2,
+            STREAM_P2    = 3,
+            STREAM_PS    = 4,
+            STREAM_SPAN  = 5,
+            STREAM_COUNT = 6
+        };
         struct frame_begin_t
         {
             u16 m_msg_id;       // 'FB' in ASCII
@@ -62,7 +72,7 @@ namespace ncore
             LF_STREAM_P8   = 1,
             LF_STREAM_P4   = 2,
             LF_STREAM_P2   = 3,
-            LF_STREAM_PS   = 4, // pixel selector stream
+            LF_STREAM_PS   = 4,  // pixel selector stream
             LF_STREAM_SPAN = 5,
         };
 

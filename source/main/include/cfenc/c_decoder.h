@@ -37,16 +37,6 @@ namespace ncore
             u16 m_msg_len;  // Total length of the encoded frame data, including this header, in bytes
         };
 
-        enum frame_line_flags_e
-        {
-            LF_STREAM_P16      = 1,
-            LF_STREAM_P8       = 2,
-            LF_STREAM_P4       = 4,
-            LF_STREAM_P2       = 8,
-            LF_STREAM_SELECTOR = 16,
-            LF_STREAM_SPAN     = 32,
-        };
-
         struct frame_line_t
         {
             u16 m_msg_id;       // 'FL' in ASCII
