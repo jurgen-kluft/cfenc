@@ -19,14 +19,12 @@ namespace ncore
             bs->pos           = 0;
             bs->accu_num_bits = 0;
             bs->accu_register = 0;
-            bs->finalized     = false;
         }
 
         s8 write_bits(writer_t* bs, u32 value, u8 num_bits)
         {
-            if (num_bits == 0 || num_bits > 30 || bs->finalized)
+            if (num_bits == 0 || num_bits > 30)
                 return -1;
-
             if ((bs->num_bits + num_bits) > bs->capacity_bits)
                 return -1;
 
@@ -51,9 +49,8 @@ namespace ncore
 
         s8 write_bits_repeat(writer_t* bs, u32 value, u8 num_bits, s32 n)
         {
-            if (num_bits == 0 || num_bits > 30 || bs->finalized)
+            if (num_bits == 0 || num_bits > 30)
                 return -1;
-
             if ((bs->num_bits + (n*num_bits)) > bs->capacity_bits)
                 return -1;
 
@@ -96,7 +93,6 @@ namespace ncore
 
             bs->accu_num_bits = 0;
             bs->accu_register = 0;
-            bs->finalized     = true;
             return bs->num_bits;
         }
 
@@ -124,8 +120,7 @@ namespace ncore
 
         s32 read_bits(reader_t* bs, u8 num_bits)
         {
-            if (num_bits == 0 || num_bits > 30)
-                return -1;
+            ASSERT(num_bits > 0 && num_bits <= 30);
 
             update_acummulator(bs);
             const u32 mask = (1u << num_bits) - 1u;
@@ -138,9 +133,7 @@ namespace ncore
 
         s32 peek_bits(reader_t* bs, u8 num_bits)
         {
-            if (num_bits == 0 || num_bits > 30)
-                return -1;
-
+            ASSERT(num_bits > 0 && num_bits <= 30);
             if ((bs->read_bits + num_bits) > bs->num_bits)
                 return -1;
 
@@ -151,9 +144,7 @@ namespace ncore
 
         s8 skip_bits(reader_t* bs, u8 num_bits)
         {
-            if (num_bits == 0 || num_bits > 30)
-                return -1;
-
+            ASSERT(num_bits > 0 && num_bits <= 30);
             if ((bs->read_bits + num_bits) > bs->num_bits)
                 return -1;
 

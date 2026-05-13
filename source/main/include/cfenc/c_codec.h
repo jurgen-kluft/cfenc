@@ -40,12 +40,12 @@ namespace ncore
 
         enum frame_line_flags_e
         {
-            LF_STREAM_P16      = 1,
-            LF_STREAM_P8       = 2,
-            LF_STREAM_P4       = 4,
-            LF_STREAM_P2       = 8,
-            LF_STREAM_SELECTOR = 16,
-            LF_STREAM_SPAN     = 32,
+            LF_STREAM_P16  = 0,
+            LF_STREAM_P8   = 1,
+            LF_STREAM_P4   = 2,
+            LF_STREAM_P2   = 3,
+            LF_STREAM_PS   = 4, // pixel selector stream
+            LF_STREAM_SPAN = 5,
         };
 
         struct frame_line_t
@@ -70,7 +70,7 @@ namespace ncore
             SELECTOR_P16 = 2
         };
 
-    }  // namespace nframe
+    }  // namespace nfenc
 }  // namespace ncore
 
 #endif  // __CFENC_FRAME_CODEC_H__

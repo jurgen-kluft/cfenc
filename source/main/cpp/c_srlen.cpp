@@ -15,6 +15,7 @@ namespace ncore
         //  - u8       run_bits[];            // array of run-bits per symbols (size = 2^symbol_bits)
         //  - u8       encoded_data[];        // the encoded bitstream data
 
+        // returns the size of the encoded bitstream in bytes, or -1 on error
         s32 analyze_bits(const u8* data, u32 data_bits, u8 symbol_bits, u8* rb_table, syminfo_t* analysis)
         {
             // only allowed symbol_bits; 1, 2, 4 or 8

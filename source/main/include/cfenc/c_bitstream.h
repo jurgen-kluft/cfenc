@@ -17,7 +17,6 @@ namespace ncore
             u32  pos;            // byte position
             u32  accu_num_bits;  // bits in accumulator
             u64  accu_register;  // bit accumulator
-            bool finalized;
         };
 
         struct reader_t
