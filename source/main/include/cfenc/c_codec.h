@@ -39,6 +39,7 @@ namespace ncore
             STREAM_SPAN  = 5,
             STREAM_COUNT = 6
         };
+
         struct frame_begin_t
         {
             u16 m_msg_id;       // 'FB' in ASCII
