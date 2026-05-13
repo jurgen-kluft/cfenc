@@ -162,13 +162,13 @@ namespace ncore
             }
             const u32 p16_pixel_count = total_pixel_count - (p2_pixel_count + p4_pixel_count + p8_pixel_count);
 
-            u32 stream_symbol_sizes[6];
-            stream_symbol_sizes[LF_STREAM_P16]  = 16;
-            stream_symbol_sizes[LF_STREAM_P8]   = 8;
-            stream_symbol_sizes[LF_STREAM_P4]   = 4;
-            stream_symbol_sizes[LF_STREAM_P2]   = 2;
-            stream_symbol_sizes[LF_STREAM_PS]   = 2;
-            stream_symbol_sizes[LF_STREAM_SPAN] = 1;
+            u8 stream_symbol_sizes[6];
+            stream_symbol_sizes[LF_STREAM_P16]  = SYMBOL_SIZE_P16;
+            stream_symbol_sizes[LF_STREAM_P8]   = SYMBOL_SIZE_P8;
+            stream_symbol_sizes[LF_STREAM_P4]   = SYMBOL_SIZE_P4;
+            stream_symbol_sizes[LF_STREAM_P2]   = SYMBOL_SIZE_P2;
+            stream_symbol_sizes[LF_STREAM_PS]   = SYMBOL_SIZE_PS;
+            stream_symbol_sizes[LF_STREAM_SPAN] = SYMBOL_SIZE_SPAN;
 
             // Now we can calculate the size each stream needs in bytes
             u32 max_stream_size_in_bytes[6]          = {0, 0, 0, 0, 0, 0};
@@ -242,25 +242,25 @@ namespace ncore
                         const u16 palette_index = encoder.m_histogram_color[crgb565];
                         if (palette_index < 4)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, 2);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, 2);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
                         }
                         else if (palette_index < 20)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, 2);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), 4);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
                         }
                         else if (palette_index < 276)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, 2);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), 8);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
                         }
                         else
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, 2);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
                             // no need to write p16 here since we don't need it because it is
                             // not going to be compressed.
-                            // nbitstream::write_bits(&p16_writer, (u32)crgb565, 16);
+                            // nbitstream::write_bits(&p16_writer, (u32)crgb565, SYMBOL_SIZE_P16);
                         }
                     }
                 }
@@ -313,7 +313,7 @@ namespace ncore
                         const u16 prgb565 = s_rgba888_to_rgb565(previous_img_row[x]);
                         span_changed      = (crgb565 != prgb565);
                     }
-                    nbitstream::write_bits(&stream_writer[LF_STREAM_SPAN], span_changed ? 1u : 0u, 1);
+                    nbitstream::write_bits(&stream_writer[LF_STREAM_SPAN], span_changed ? 1u : 0u, SYMBOL_SIZE_SPAN);
                     if (!span_changed)
                         continue;
                     num_spans_changed++;
@@ -321,33 +321,32 @@ namespace ncore
                     for (u32 x = x0; x < x1; ++x)
                     {
                         const u16 crgb565 = s_rgba888_to_rgb565(current_img_row[x]);
+                        const u16 palette_index = encoder.m_histogram_color[crgb565];
 
                         // Note:
                         // Below we are ignoring the return value of write_bits for performance reasons
-                        // We know that the stream have enough capacity because we calculated and reserved
+                        // We know that the streams have enough capacity because we calculated and reserved
                         // the correct amount of memory for each stream at the start of this function,
                         // and we are filling the streams in a way that matches the calculated sizes.
-
-                        const u16 palette_index = encoder.m_histogram_color[crgb565];
                         if (palette_index < 4)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, stream_symbol_sizes[LF_STREAM_PS]);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, stream_symbol_sizes[LF_STREAM_P2]);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P2, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P2], (u32)palette_index, SYMBOL_SIZE_P2);
                         }
                         else if (palette_index < 20)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, stream_symbol_sizes[LF_STREAM_PS]);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), stream_symbol_sizes[LF_STREAM_P4]);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P4, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P4], (u32)(palette_index - 4), SYMBOL_SIZE_P4);
                         }
                         else if (palette_index < 276)
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, stream_symbol_sizes[LF_STREAM_PS]);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), stream_symbol_sizes[LF_STREAM_P8]);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P8, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P8], (u32)(palette_index - 20), SYMBOL_SIZE_P8);
                         }
                         else
                         {
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, stream_symbol_sizes[LF_STREAM_PS]);
-                            nbitstream::write_bits(&stream_writer[LF_STREAM_P16], (u32)crgb565, stream_symbol_sizes[LF_STREAM_P16]);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_PS], SELECTOR_P16, SYMBOL_SIZE_PS);
+                            nbitstream::write_bits(&stream_writer[LF_STREAM_P16], (u32)crgb565, SYMBOL_SIZE_P16);
                         }
                     }
                 }

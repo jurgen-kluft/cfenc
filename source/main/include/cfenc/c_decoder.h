@@ -5,6 +5,8 @@
     #pragma once
 #endif
 
+#include "cfenc/c_codec.h"
+
 namespace ncore
 {
     namespace nfenc
@@ -27,14 +29,6 @@ namespace ncore
             u8  m_ps_rb[4];      // SRLE run-bits for pixel selector stream
             u8  m_span_rb[2];    // SRLE run-bits for span change stream
             // u8 m_tile_change_data[];  // the (non-encoded) tile change data
-        };
-
-        enum selector_e
-        {
-            SELECTOR_P2  = 0,
-            SELECTOR_P4  = 1,
-            SELECTOR_P8  = 3,
-            SELECTOR_P16 = 2
         };
 
         struct frame_end_t

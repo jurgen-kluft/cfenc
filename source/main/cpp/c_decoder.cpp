@@ -17,12 +17,6 @@ namespace ncore
             nsrlen::decoder_t p4_decoder;
             nsrlen::decoder_t p8_decoder;
 
-            nsrlen::init(&span_decoder, nullptr);
-            nsrlen::init(&ps_decoder, nullptr);
-            nsrlen::init(&p2_decoder, nullptr);
-            nsrlen::init(&p4_decoder, nullptr);
-            nsrlen::init(&p8_decoder, nullptr);
-
             u16*              p16_data = nullptr;
             u16               p16_pos  = 0;
 
@@ -30,34 +24,34 @@ namespace ncore
             u8 const*  data_ptr       = (u8 const*)(stream_lengths + line_msg->m_num_streams);
 
             i32 i = 0;
-            if (line_msg->m_flags & LF_STREAM_P16)
+            if (line_msg->m_flags & (1<<LF_STREAM_P16))
             {
                 p16_data = (u16*)data_ptr;
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & LF_STREAM_P8)
+            if (line_msg->m_flags & (1<<LF_STREAM_P8))
             {
-                p8_decoder.m_stream = data_ptr;
+                nsrlen::init(&p8_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & LF_STREAM_P4)
+            if (line_msg->m_flags & (1<<LF_STREAM_P4))
             {
-                p4_decoder.m_stream = data_ptr;
+                nsrlen::init(&p4_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & LF_STREAM_P2)
+            if (line_msg->m_flags & (1<<LF_STREAM_P2))
             {
-                p2_decoder.m_stream = data_ptr;
+                nsrlen::init(&p2_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & LF_STREAM_SELECTOR)
+            if (line_msg->m_flags & (1<<LF_STREAM_SELECTOR))
             {
-                ps_decoder.m_stream = data_ptr;
+                nsrlen::init(&ps_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & LF_STREAM_SPAN)
+            if (line_msg->m_flags & (1<<LF_STREAM_SPAN))
             {
-                span_decoder.m_stream = data_ptr;
+                nsrlen::init(&span_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
 
@@ -65,18 +59,18 @@ namespace ncore
             // minimize the number of memcpy calls to PSRAM, as they are expensive.
             for (u16 s = 0; s < spans_per_line; s++)
             {
-                const u8 dirty_span = nsrlen::read_symbol(&span_decoder, frame.m_span_rb, 1);
+                const u8 dirty_span = nsrlen::read_symbol(&span_decoder, frame.m_span_rb, SYMBOL_SIZE_SPAN);
                 if (dirty_span == 1)
                 {
                     for (u16 x = 0; x < span_width; x++)
                     {
-                        const u8 selector = nsrlen::read_symbol(&ps_decoder, frame.m_ps_rb, 2);
+                        const u8 selector = nsrlen::read_symbol(&ps_decoder, frame.m_ps_rb, SYMBOL_SIZE_PS);
                         u16      color;
                         switch (selector)
                         {
-                            case SELECTOR_P2: color = frame.m_palette[nsrlen::read_symbol(&p2_decoder, frame.m_p2_rb, 1)]; break;
-                            case SELECTOR_P4: color = frame.m_palette[4 + nsrlen::read_symbol(&p4_decoder, frame.m_p4_rb, 2)]; break;
-                            case SELECTOR_P8: color = frame.m_palette[20 + nsrlen::read_symbol(&p8_decoder, frame.m_p8_rb, 8)]; break;
+                            case SELECTOR_P2: color = frame.m_palette[nsrlen::read_symbol(&p2_decoder, frame.m_p2_rb, SYMBOL_SIZE_P2)]; break;
+                            case SELECTOR_P4: color = frame.m_palette[4 + nsrlen::read_symbol(&p4_decoder, frame.m_p4_rb, SYMBOL_SIZE_P4)]; break;
+                            case SELECTOR_P8: color = frame.m_palette[20 + nsrlen::read_symbol(&p8_decoder, frame.m_p8_rb, SYMBOL_SIZE_P8)]; break;
                             case SELECTOR_P16: color = p16_data[p16_pos++]; break;
                         }
                         s_span_line_buffer[x] = color;

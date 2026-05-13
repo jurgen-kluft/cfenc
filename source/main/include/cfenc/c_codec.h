@@ -11,6 +11,24 @@ namespace ncore
 {
     namespace nfenc
     {
+        enum selector_e
+        {
+            SELECTOR_P2  = 0,
+            SELECTOR_P4  = 1,
+            SELECTOR_P8  = 3,
+            SELECTOR_P16 = 2
+        };
+
+        enum symbol_size_e
+        {
+            SYMBOL_SIZE_P16  = 16,
+            SYMBOL_SIZE_P8   = 8,
+            SYMBOL_SIZE_P4   = 4,
+            SYMBOL_SIZE_P2   = 2,
+            SYMBOL_SIZE_PS   = 2,
+            SYMBOL_SIZE_SPAN = 1
+        };
+
         struct frame_begin_t
         {
             u16 m_msg_id;       // 'FB' in ASCII
@@ -61,14 +79,6 @@ namespace ncore
         };
 
         void decode_line(frame_begin_t& frame, u16 span_width, u16 spans_per_line, frame_line_t const* line_msg, u16* out_psram_ptr);
-
-        enum selector_e
-        {
-            SELECTOR_P2  = 0,
-            SELECTOR_P4  = 1,
-            SELECTOR_P8  = 3,
-            SELECTOR_P16 = 2
-        };
 
     }  // namespace nfenc
 }  // namespace ncore
