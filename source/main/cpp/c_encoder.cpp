@@ -1,5 +1,6 @@
 #include "ccore/c_target.h"
 #include "ccore/c_allocator.h"
+#include "ccore/c_math.h"
 #include "ccore/c_memory.h"
 #include "ccore/c_qsort.h"
 
@@ -83,7 +84,7 @@ namespace ncore
             for (i32 i = 0; i < 276; ++i)
                 f.m_palette[i] = 0;
 
-            // Set width, height, and run length in the header
+            // Set width, height, and span length in the header
             f.m_img_width   = img_width;
             f.m_img_height  = img_height;
             f.m_tile_width  = tile_size;
@@ -107,6 +108,14 @@ namespace ncore
         static inline u32 s_units_to_bytes(u32 units, u32 bits_per_unit) { return ((units * bits_per_unit) + 7) >> 3; }
         static inline u16 s_rgba888_to_rgb565(u32 rgba) { return ((rgba >> 8) & 0xf800) | ((rgba >> 5) & 0x07e0) | ((rgba >> 3) & 0x001f); }
 
+        static inline void s_update_tile(u8* tile_change_data, u32 line_index, u32 line_span_index, u32 spans_per_line)
+        {
+            const u32 line_offset = line_index * ((spans_per_line + 7) / 8);
+            const u32 bit_index   = line_span_index & 7;   // bit index within the byte
+            const u32 byte_index  = line_span_index >> 3;  // byte index within the line's tile change data
+            tile_change_data[line_offset + byte_index] |= (1 << bit_index);
+        }
+
         static s32 s_compress(const u8* stream, u32 stream_size_in_bits, u8 symbol_bits, u8* out_stream, u8* out_symbol_rb)
         {
             // size in bytes of the encoded stream, or a negative value on error
@@ -129,16 +138,18 @@ namespace ncore
 
         encoded_frame_t* encode_frame(arena_t* arena, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size)
         {
-            histogram_t* histogram = g_allocate<histogram_t>(arena);
-
-            void* current_address = narena::current_address(arena);
+            ASSERT(g_alignUp4(sizeof(frame_begin_t)) == sizeof(frame_begin_t));                         // Ensure frame_begin_t is already aligned to 4 bytes!
 
             // Initialize histogram and palette
+            histogram_t* histogram = g_allocate<histogram_t>(arena);
             for (i32 i = 0; i < 65536; ++i)
             {
                 histogram->m_items[i].m_color = i;  // Initialize histogram color (index)
                 histogram->m_items[i].m_count = 0;  // Initialize histogram count
             }
+
+            // Used for computing the full encoded data size
+            void* begin_memory_used = narena::current_address(arena);
 
             // 1. Build color histogram and palette
             for (u32 y = 0; y < height; ++y)
@@ -158,10 +169,12 @@ namespace ncore
 
             // Compute the required size for frame_begin_t that includes a dynamically sized tile change
             // data array based on the image dimensions and tile size, and allocate memory for it from the arena.
-            const u32      span_count_per_line = (width + tile_size - 1) / tile_size;
-            const u32      total_span_count    = span_count_per_line * height;
-            const u32      frame_begin_size    = sizeof(frame_begin_t) + ((total_span_count + 7) / 8);  // size of frame_begin_t + size of tile change data in bytes
-            frame_begin_t* frame_begin         = g_allocate_memory<frame_begin_t>(arena, frame_begin_size);
+            const u32 span_count_per_line   = (width + tile_size - 1) / tile_size;
+            const u32 tile_change_data_size = g_alignUp4((span_count_per_line + 7) / 8 * (u32)height);  // size of tile change data in bytes, rounded up to the nearest byte
+            const u32      frame_begin_size = sizeof(frame_begin_t) + tile_change_data_size;            // total size of frame_begin_t including tile change data
+            frame_begin_t* frame_begin      = g_allocate_memory<frame_begin_t>(arena, frame_begin_size);
+            u8*            tile_change_data = (u8*)(frame_begin + 1);   // tile change data starts immediately after the frame_begin_t structure
+            g_memory_fill(tile_change_data, 0, tile_change_data_size);  // Initialize tile change data to 0
 
             // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
             for (i32 i = 0; i < 276; ++i)
@@ -218,8 +231,8 @@ namespace ncore
             // Now that we have everything set up, we can start encoding the image by comparing it to the
             // previous image and filling the streams accordingly.
 
-            // Obtain an arena restore point, since the allocated data streams below are temporary
-            arena_scratch_t scratch = begin_scratch(arena);
+            // Obtain an arena scratch point, since the allocated data streams below are temporary
+            arena_point_t scratch_point = save_point(arena);
 
             nbitstream::writer_t stream_writer[STREAM_COUNT];
             u32                  stream_data_sizes[STREAM_COUNT] = {0, 0, 0, 0, 0, 0};
@@ -244,16 +257,15 @@ namespace ncore
 
                 // First we encode the full image to obtain the rb values for each stream, which are needed for
                 // compressing the streams per line.
-                const u32 span_count_per_line = (width + tile_size - 1) / tile_size;
                 for (u32 y = 0; y < height; ++y)
                 {
                     u32 const* current_img_row  = current_img + y * width;
                     u32 const* previous_img_row = previous_img + y * width;
 
                     u32 num_spans_changed = 0;
-                    for (u32 run = 0; run < span_count_per_line; ++run)
+                    for (u32 span = 0; span < span_count_per_line; ++span)
                     {
-                        const u32 x0 = run * tile_size;
+                        const u32 x0 = span * tile_size;
                         const u32 x1 = (x0 + tile_size) < width ? (x0 + tile_size) : width;
 
                         bool span_changed = false;
@@ -267,6 +279,9 @@ namespace ncore
                         if (!span_changed)
                             continue;
                         num_spans_changed++;
+
+                        // Update this tile as changed in the tile change data
+                        s_update_tile(tile_change_data, y, span, span_count_per_line);
 
                         for (u32 x = x0; x < x1; ++x)
                         {
@@ -306,22 +321,26 @@ namespace ncore
 
                 // Compress the streams to obtain the rb values for each stream, which are needed for the frame header,
                 // and also to compress streams per line.
-                u8* stream_enc_data_ptrs[STREAM_COUNT];
                 for (u32 i = 0; i < STREAM_COUNT; ++i)
                 {
                     if (i == STREAM_P16)
-                        continue;  // We don't compress the P16 stream, so we don't need to calculate rb values for it
+                        continue;
 
                     const u32 stream_size_in_bits = nbitstream::finalize(&stream_writer[i]);
                     if (stream_size_in_bits == 0)
                         continue;  // No data in this stream, so we can skip compression and rb calculation
 
-                    stream_enc_data_ptrs[i]                = (u8*)g_allocate_memory<u8>(arena, s_units_to_bytes(stream_size_in_bits, 8));
-                    const s32 encoded_stream_size_in_bytes = s_compress(stream_data_ptrs[i], stream_size_in_bits, stream_symbol_sizes[i], stream_enc_data_ptrs[i], rb_arrays[i]);
-                    ASSERT(encoded_stream_size_in_bytes >= 0);
+                    arena_point_t encoding_point = save_point(arena);
+                    {
+                        u8*       stream_enc_data_ptr          = (u8*)g_allocate_memory<u8>(arena, s_units_to_bytes(stream_size_in_bits, 8));
+                        const s32 encoded_stream_size_in_bytes = s_compress(stream_data_ptrs[i], stream_size_in_bits, stream_symbol_sizes[i], stream_enc_data_ptr, rb_arrays[i]);
+                        ASSERT(encoded_stream_size_in_bytes >= 0);
+                    }
+                    restore_point(encoding_point);
                 }
             }
-            end_scratch(scratch);  // Free the temporary memory used for encoding the streams, since we have already copied the compressed streams to the frame data below.
+            // Now that we have the rb-arrays, release the memory used for encoding the streams
+            restore_point(scratch_point);
 
             // Now we are going to encode the image line by line, and for each line we will emit a frame_line_t
             // structure, followed by the compressed streams for that line. We will use the rb values obtained
@@ -343,8 +362,8 @@ namespace ncore
                 enc_stream_data_ptrs[i]  = enc_stream_data_ptr;
             }
 
-            arena_checkout_t line_memory             = checkout(arena);
-            u32              number_of_lines_emitted = 0;
+            arena_point_t line_memory_start       = save_point(arena);
+            u32           number_of_lines_emitted = 0;
 
             const u32 span_count_per_line = (width + tile_size - 1) / tile_size;
             for (u32 y = 0; y < height; ++y)
@@ -359,9 +378,9 @@ namespace ncore
                 }
 
                 u32 num_spans_changed = 0;
-                for (u32 run = 0; run < span_count_per_line; ++run)
+                for (u32 span = 0; span < span_count_per_line; ++span)
                 {
-                    const u32 x0 = run * tile_size;
+                    const u32 x0 = span * tile_size;
                     const u32 x1 = (x0 + tile_size) < width ? (x0 + tile_size) : width;
 
                     bool span_changed = false;
@@ -419,9 +438,10 @@ namespace ncore
                     }
 
                     number_of_lines_emitted++;
-                    frame_line_t* fl = g_allocate<frame_line_t>(line_memory, 4);
-                    fl->m_msg_id     = 0x464c;  // 'FL' in ASCII
-                    fl->m_index      = (u16)y;
+                    arena_point_t line_start = save_point(arena);
+                    frame_line_t* fl         = g_allocate<frame_line_t>(arena, 4);
+                    fl->m_msg_id             = 0x464c;  // 'FL' in ASCII
+                    fl->m_index              = (u16)y;
 
                     fl->m_flags = 0;
                     for (i32 i = 0; i < STREAM_COUNT; ++i)
@@ -454,7 +474,7 @@ namespace ncore
                     }
 
                     // Emit the dynamic size array of stream sizes, in the order of p16, p8, p4, p2, selector, span
-                    u16* stream_sizes = g_allocate_memory<u16>(line_memory, fl->m_num_streams, 2);
+                    u16* stream_sizes = g_allocate_memory<u16>(arena, fl->m_num_streams, 2);
                     u32  si           = 0;
                     for (i32 i = 0; i < STREAM_COUNT; ++i)
                     {
@@ -467,7 +487,7 @@ namespace ncore
                     {
                         if (stream_written_bits[i] > 0)
                         {
-                            u8* stream_data_ptr = g_allocate_memory<u8>(line_memory, stream_enc_sizes[i], 1);
+                            u8* stream_data_ptr = g_allocate_memory<u8>(arena, stream_enc_sizes[i], 1);
                             g_memcpy(stream_data_ptr, enc_stream_data_ptrs[i], stream_enc_sizes[i]);
                             stream_data_ptr += stream_enc_sizes[i];
                         }
@@ -475,23 +495,26 @@ namespace ncore
 
                     // Set the message length for this line, which is:
                     //    sizeof(frame_line_t) + stream sizes array + all stream data
-                    fl->m_msg_len = (u16)commit(line_memory);
+                    arena_point_t line_end = save_point(arena);
+                    fl->m_msg_len          = diff_point<u16>(line_start, line_end);
                 }
 
-                const u32 encoded_size = g_ptr_diff_in_bytes(narena::current_address(arena), current_address);
+                void* end_memory_used = narena::current_address(arena);
+                const u32 encoded_size = g_ptr_diff_in_bytes<u32>(begin_memory_used, end_memory_used);
 
-                const u64 lines_data_size = finalize(line_memory);
+                arena_point_t line_memory_end = save_point(arena);
+                const u32     lines_data_size = diff_point<u32>(line_memory_start, line_memory_end);
 
                 encoded_frame_t* result    = g_allocate<encoded_frame_t>(arena);
                 result->m_frame_begin      = frame_begin;
                 result->m_frame_begin_size = frame_begin_size;
-                result->m_line_data        = (frame_line_t*)line_memory.m_save_address;
+                result->m_line_data        = (frame_line_t*)line_memory_start.m_address;
                 result->m_line_data_size   = (u32)lines_data_size;
                 result->m_num_lines        = number_of_lines_emitted;
 
                 result->m_lines = g_allocate<frame_line_t*>(arena, number_of_lines_emitted);
                 {
-                    frame_line_t* line = (frame_line_t*)line_memory.m_save_address;
+                    frame_line_t* line = (frame_line_t*)line_memory_start.m_address;
                     for (u32 i = 0; i < number_of_lines_emitted; ++i)
                     {
                         result->m_lines[i] = line;

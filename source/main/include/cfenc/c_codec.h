@@ -46,9 +46,9 @@ namespace ncore
             u16 m_msg_len;      // Total length of this message, including this header, in bytes
             u16 m_img_width;    // Width of the image
             u16 m_img_height;   // Height of the image
+            u16 m_tile_stride;  // Number of bytes per row of tiles (for tile line memory alignment)
             u8  m_tile_width;   // Width of the image (span is the same size as tile width)
             u8  m_tile_height;  // Height of the image
-            u16 m_tile_stride;  // Number of bytes per row of tiles (for tile line memory alignment)
 
             u16 m_palette[276];  // RGB565 palette (4 colors for P2, 16 colors for P4, 256 colors for P8)
             u8  m_p8_rb[256];    // SRLE run-bits for P8 stream
@@ -56,6 +56,7 @@ namespace ncore
             u8  m_p2_rb[4];      // SRLE run-bits for P2 stream
             u8  m_ps_rb[4];      // SRLE run-bits for pixel selector stream
             u8  m_span_rb[2];    // SRLE run-bits for span change stream
+            u8  m_reserved[2];   // alignment to 4 bytes
             // u8 m_tile_change_data[];  // the (non-encoded) tile change data
         };
 
