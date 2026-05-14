@@ -11,6 +11,13 @@ namespace ncore
 {
     namespace nfenc
     {
+        enum 
+        {
+            MSG_ID_FRAME_BEGIN = 0x4642,  // 'FB' in ASCII, frame_begin_t
+            MSG_ID_FRAME_LINE  = 0x464C,  // 'FL' in ASCII, frame_line_t
+            MSG_ID_FRAME_END   = 0x4645   // 'FE' in ASCII, frame_end_t
+        };
+
         // Encoded Frame Header Structure
         struct frame_begin_t
         {

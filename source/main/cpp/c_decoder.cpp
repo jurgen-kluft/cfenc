@@ -17,39 +17,39 @@ namespace ncore
             nsrlen::decoder_t p4_decoder;
             nsrlen::decoder_t p8_decoder;
 
-            u16*              p16_data = nullptr;
-            u16               p16_pos  = 0;
+            u16* p16_data = nullptr;
+            u16  p16_pos  = 0;
 
             u16 const* stream_lengths = (u16 const*)((u8 const*)line_msg + sizeof(frame_line_t));
             u8 const*  data_ptr       = (u8 const*)(stream_lengths + line_msg->m_num_streams);
 
             i32 i = 0;
-            if (line_msg->m_flags & (1<<STREAM_P16))
+            if (line_msg->m_flags & (1 << STREAM_P16))
             {
                 p16_data = (u16*)data_ptr;
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<STREAM_P8))
+            if (line_msg->m_flags & (1 << STREAM_P8))
             {
                 nsrlen::init(&p8_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<STREAM_P4))
+            if (line_msg->m_flags & (1 << STREAM_P4))
             {
                 nsrlen::init(&p4_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<STREAM_P2))
+            if (line_msg->m_flags & (1 << STREAM_P2))
             {
                 nsrlen::init(&p2_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<STREAM_PS))
+            if (line_msg->m_flags & (1 << STREAM_PS))
             {
                 nsrlen::init(&ps_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
             }
-            if (line_msg->m_flags & (1<<STREAM_SPAN))
+            if (line_msg->m_flags & (1 << STREAM_SPAN))
             {
                 nsrlen::init(&span_decoder, data_ptr);
                 data_ptr += stream_lengths[i++];
@@ -57,6 +57,7 @@ namespace ncore
 
             // TODO, track contigues dirty spans and fill the s_span_line_buffer to
             // minimize the number of memcpy calls to PSRAM, as they are expensive.
+            u16* psram_line = out_psram_ptr + line_msg->m_index * frame.m_img_width;
             for (u16 s = 0; s < spans_per_line; s++)
             {
                 const u8 dirty_span = nsrlen::read_symbol(&span_decoder, frame.m_span_rb, SYMBOL_SIZE_SPAN);
@@ -78,7 +79,7 @@ namespace ncore
 
                     // memcpy to PSRAM at the correct position for this span
                     const u16 tile_x = s * span_width;
-                    g_memcpy(out_psram_ptr + tile_x, s_span_line_buffer, span_width * sizeof(u16));
+                    g_memcpy(psram_line + tile_x, s_span_line_buffer, span_width * sizeof(u16));
                 }
             }
         }
