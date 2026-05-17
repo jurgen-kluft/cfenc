@@ -57,7 +57,6 @@ namespace ncore
             u8  m_ps_rb[4];      // SRLE run-bits for pixel selector stream
             u8  m_span_rb[2];    // SRLE run-bits for span change stream
             u8  m_reserved[2];   // alignment to 4 bytes
-            // u8 m_tile_change_data[];  // the (non-encoded) tile change data
         };
 
         void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_size);
