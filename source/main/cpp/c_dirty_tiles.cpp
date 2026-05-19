@@ -13,7 +13,7 @@ namespace ncore
         {
             if (tiles.m_tiles_data != nullptr)
             {
-                u32 const row_words = tiles.m_tiles_stride;
+                u16 const row_words = tiles.m_tiles_stride;
                 for (u16 y = 0; y < tiles.m_tiles_rows; y++)
                 {
                     u32* row = tiles.m_tiles_data + y * row_words;
