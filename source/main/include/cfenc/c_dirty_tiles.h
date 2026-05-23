@@ -17,7 +17,7 @@ namespace ncore
         {
             u8   m_tile_width_shift;   // Width of the tile in pixels (4 = 16 pixels, 5 = 32 pixels, etc.)
             u8   m_tile_height_shift;  // Height of the tile in pixels (4 = 16 pixels, 5 = 32 pixels, etc.)
-            u8   m_tiles_stride;       // Number of words per row of tiles (for tile line memory alignment)
+            u8   m_tiles_stride;       // Number of words (u32) per row of tiles (for tile line memory alignment)
             u8   m_reserved;           // alignment to 4 bytes
             u16  m_tiles_cols;         // Number of tile columns
             u16  m_tiles_rows;         // Number of tile rows
