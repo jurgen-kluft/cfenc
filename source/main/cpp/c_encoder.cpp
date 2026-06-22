@@ -138,7 +138,7 @@ namespace ncore
 
         encoded_frame_t* encode_frame(arena_t* arena, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size)
         {
-            ASSERT(g_alignUp4(sizeof(frame_begin_t)) == sizeof(frame_begin_t));                         // Ensure frame_begin_t is already aligned to 4 bytes!
+            ASSERT(g_alignUp4(sizeof(frame_begin_t)) == sizeof(frame_begin_t));  // Ensure frame_begin_t is already aligned to 4 bytes!
 
             // Initialize histogram and palette
             histogram_t* histogram = g_allocate<histogram_t>(arena);
@@ -169,12 +169,12 @@ namespace ncore
 
             // Compute the required size for frame_begin_t that includes a dynamically sized tile change
             // data array based on the image dimensions and tile size, and allocate memory for it from the arena.
-            const u32 span_count_per_line   = (width + tile_size - 1) / tile_size;
-            const u32 tile_change_data_size = g_alignUp4((span_count_per_line + 7) / 8 * (u32)height);  // size of tile change data in bytes, rounded up to the nearest byte
-            const u32      frame_begin_size = sizeof(frame_begin_t) + tile_change_data_size;            // total size of frame_begin_t including tile change data
-            frame_begin_t* frame_begin      = g_allocate_memory<frame_begin_t>(arena, frame_begin_size);
-            u8*            tile_change_data = (u8*)(frame_begin + 1);   // tile change data starts immediately after the frame_begin_t structure
-            g_memory_fill(tile_change_data, 0, tile_change_data_size);  // Initialize tile change data to 0
+            const u32      span_count_per_line   = (width + tile_size - 1) / tile_size;
+            const u32      tile_change_data_size = math::alignUp4((span_count_per_line + 7) / 8 * (u32)height);  // size of tile change data in bytes, rounded up to the nearest byte
+            const u32      frame_begin_size      = sizeof(frame_begin_t) + tile_change_data_size;                // total size of frame_begin_t including tile change data
+            frame_begin_t* frame_begin           = g_allocate_memory<frame_begin_t>(arena, frame_begin_size);
+            u8*            tile_change_data      = (u8*)(frame_begin + 1);  // tile change data starts immediately after the frame_begin_t structure
+            g_memory_fill(tile_change_data, 0, tile_change_data_size);      // Initialize tile change data to 0
 
             // Build RGB565 -> palette index map: 0..275 for palette entries, -1 for raw.
             for (i32 i = 0; i < 276; ++i)
@@ -365,7 +365,6 @@ namespace ncore
             arena_point_t line_memory_start       = save_point(arena);
             u32           number_of_lines_emitted = 0;
 
-            const u32 span_count_per_line = (width + tile_size - 1) / tile_size;
             for (u32 y = 0; y < height; ++y)
             {
                 u32 const* current_img_row  = current_img + y * width;
@@ -498,32 +497,32 @@ namespace ncore
                     arena_point_t line_end = save_point(arena);
                     fl->m_msg_len          = diff_point<u16>(line_start, line_end);
                 }
-
-                void* end_memory_used = narena::current_address(arena);
-                const u32 encoded_size = g_ptr_diff_in_bytes<u32>(begin_memory_used, end_memory_used);
-
-                arena_point_t line_memory_end = save_point(arena);
-                const u32     lines_data_size = diff_point<u32>(line_memory_start, line_memory_end);
-
-                encoded_frame_t* result    = g_allocate<encoded_frame_t>(arena);
-                result->m_frame_begin      = frame_begin;
-                result->m_frame_begin_size = frame_begin_size;
-                result->m_line_data        = (frame_line_t*)line_memory_start.m_address;
-                result->m_line_data_size   = (u32)lines_data_size;
-                result->m_num_lines        = number_of_lines_emitted;
-
-                result->m_lines = g_allocate<frame_line_t*>(arena, number_of_lines_emitted);
-                {
-                    frame_line_t* line = (frame_line_t*)line_memory_start.m_address;
-                    for (u32 i = 0; i < number_of_lines_emitted; ++i)
-                    {
-                        result->m_lines[i] = line;
-                        line               = g_ptr_advance(line, line->m_msg_len);
-                    }
-                }
-
-                return result;
             }
 
-        }  // namespace nfenc
-    }  // namespace ncore
+            void*     end_memory_used = narena::current_address(arena);
+            const u32 encoded_size    = g_ptr_diff_in_bytes<u32>(begin_memory_used, end_memory_used);
+
+            arena_point_t line_memory_end = save_point(arena);
+            const u32     lines_data_size = diff_point<u32>(line_memory_start, line_memory_end);
+
+            encoded_frame_t* result    = g_allocate<encoded_frame_t>(arena);
+            result->m_frame_begin      = frame_begin;
+            result->m_frame_begin_size = frame_begin_size;
+            result->m_line_data        = (frame_line_t*)line_memory_start.m_address;
+            result->m_line_data_size   = (u32)lines_data_size;
+            result->m_num_lines        = number_of_lines_emitted;
+
+            result->m_lines = g_allocate<frame_line_t*>(arena, number_of_lines_emitted);
+            {
+                frame_line_t* line = (frame_line_t*)line_memory_start.m_address;
+                for (u32 i = 0; i < number_of_lines_emitted; ++i)
+                {
+                    result->m_lines[i] = line;
+                    line               = g_ptr_advance(line, line->m_msg_len);
+                }
+            }
+
+            return result;
+        }
+    }  // namespace nfenc
+}  // namespace ncore
