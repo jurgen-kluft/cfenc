@@ -50,8 +50,8 @@ namespace ncore
                 {
                     if (is_tile_marked_on_row(tiles, row, x))
                     {
-                        const u16 img_x = x << tiles.m_tile_width_shift;   // Convert tile_x to img_x
-                        const u16 img_y = y << tiles.m_tile_height_shift;  // Convert tile_y to img_y
+                        //const u16 img_x = x << tiles.m_tile_width_shift;   // Convert tile_x to img_x
+                        //const u16 img_y = y << tiles.m_tile_height_shift;  // Convert tile_y to img_y
 
                         //
                         // Process the tile at (x, y)

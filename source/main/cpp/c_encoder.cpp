@@ -138,7 +138,7 @@ namespace ncore
 
         encoded_frame_t* encode_frame(arena_t* arena, u32 const* current_img, u32 const* previous_img, u16 width, u16 height, u16 tile_size)
         {
-            ASSERT(g_alignUp4(sizeof(frame_begin_t)) == sizeof(frame_begin_t));  // Ensure frame_begin_t is already aligned to 4 bytes!
+            ASSERT(math::alignUp4(sizeof(frame_begin_t)) == sizeof(frame_begin_t));  // Ensure frame_begin_t is already aligned to 4 bytes!
 
             // Initialize histogram and palette
             histogram_t* histogram = g_allocate<histogram_t>(arena);
