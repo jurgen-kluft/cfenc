@@ -22,7 +22,7 @@
   ✅ Runs are bucketed using R bits {0, 1, 2, 3, 4, 5}
   ✅ For each symbol, we evaluate all run‑bit options:  rb ∈ {0, 1, 2, 3, 4, 5}
   ✅ rb = 0 means RAW (no run encoding)
-  ✅ For each symbol, we pick the rb that minimizes encoded size
+  ✅ For each symbol, we pick the rb that <= size
   ✅ Encoding uses per‑symbol rb
-  ✅ This guarantees no expansion per symbol
-  ✅ Write unittests for SRLEN that encodes known streams and then decodes and compares
+  ✅ This guarantees compressed size <= original size
+

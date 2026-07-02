@@ -1,5 +1,4 @@
 #include "ccore/c_target.h"
-#include "ccore/c_allocator.h"
 #include "ccore/c_math.h"
 #include "ccore/c_memory.h"
 #include "ccore/c_qsort.h"
@@ -42,24 +41,6 @@ namespace ncore
             };
             item_t m_items[65536];  // RGB565 histogram, the color or index
         };
-
-        // struct encoder_t
-        // {
-        //     histogram_t m_histogram;  // storage usage = 65536 * 8 bytes = 512 KiB
-
-        //     // Some streams here might be totally oversized, but organizing them in this manner makes
-        //     // the encoder logic simpler. (storage usage ~= 2 * 48 KiB = 96 KiB)
-        //     u16 m_streams[STREAM_COUNT][c_max_pixels_per_line];
-        //     u16 m_enc_streams[STREAM_COUNT][c_max_pixels_per_line];
-
-        //     // Tile change data is stored as a bitstream
-        //     // storage usage = (c_max_spans_per_line * c_max_lines) / 8 bytes = 32 KiB, which is
-        //     // negligible compared to the potential size of the image data and the histogram, so we
-        //     // can afford to store it in a fixed-size buffer for simplicity.
-        //     // The actual size of the tile change data will depend on the number of spans and lines
-        //     // in the image, but it will never exceed this fixed size.
-        //     u8 m_tile_change_data[(c_max_spans_per_line * c_max_lines) / 8];
-        // };
 
         void init_frame_begin(frame_begin_t& f, u16 img_width, u16 img_height, u16 tile_size)
         {

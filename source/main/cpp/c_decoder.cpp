@@ -24,7 +24,7 @@ namespace ncore
                 const u8 dirty_span = nsrlen::read_symbol(&span_decoder, frame.m_span_rb, SYMBOL_SIZE_SPAN);
                 if (dirty_span == 1)
                 {
-                    mark_tile_on_row(dirty_tiles, tile_row, s);
+                    mark_tile_on_row(tile_row, s);
                 }
             }
         }

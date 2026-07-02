@@ -30,13 +30,13 @@ namespace ncore
         static inline u16 img_y_to_tile_y(dirty_tiles_t const& tiles, u16 img_y) { return img_y >> tiles.m_tile_height_shift; }
 
         static inline u32* get_tile_row_ptr(const dirty_tiles_t& tiles, u16 tile_y) { return tiles.m_tiles_data + tile_y * tiles.m_tiles_stride; }
-        static inline void mark_tile_on_row(dirty_tiles_t& tiles, u32* tile_row, u16 tile_x) { tile_row[tile_x >> 5] |= (1 << (tile_x & 31)); }
-        static inline bool is_tile_marked_on_row(const dirty_tiles_t& tiles, const u32* tile_row, u16 tile_x) { return (tile_row[tile_x >> 5] & (1 << (tile_x & 31))) != 0; }
+        static inline void mark_tile_on_row(u32* tile_row, u16 tile_x) { tile_row[tile_x >> 5] |= (1 << (tile_x & 31)); }
+        static inline bool is_tile_marked_on_row(const u32* tile_row, u16 tile_x) { return (tile_row[tile_x >> 5] & (1 << (tile_x & 31))) != 0; }
 
         static inline void mark_dirty(dirty_tiles_t& tiles, u16 tile_x, u16 tile_y)
         {
             u32* tile_row = get_tile_row_ptr(tiles, tile_y);
-            mark_tile_on_row(tiles, tile_row, tile_x);
+            mark_tile_on_row(tile_row, tile_x);
         }
 
         // Example of iterating over all dirty tiles:
@@ -48,10 +48,10 @@ namespace ncore
                 const u32* row = get_tile_row_ptr(tiles, y);
                 for (u16 x = 0; x < tiles.m_tiles_cols; x++)
                 {
-                    if (is_tile_marked_on_row(tiles, row, x))
+                    if (is_tile_marked_on_row(row, x))
                     {
-                        //const u16 img_x = x << tiles.m_tile_width_shift;   // Convert tile_x to img_x
-                        //const u16 img_y = y << tiles.m_tile_height_shift;  // Convert tile_y to img_y
+                        // const u16 img_x = x << tiles.m_tile_width_shift;   // Convert tile_x to img_x
+                        // const u16 img_y = y << tiles.m_tile_height_shift;  // Convert tile_y to img_y
 
                         //
                         // Process the tile at (x, y)
